@@ -1,34 +1,32 @@
 #!/usr/bin/env python3
-"""
-ABM: Active Buffer Management in Datacenters - Figure 6 Replication
-CIS 437/537 Final Project - Fnu Nidhi (UMID: 92553817)
-
-Paper: Addanki et al., "ABM: Active Buffer Management in Datacenters"
-       ACM SIGCOMM 2022, https://dl.acm.org/doi/10.1145/3544216.3544252
-
-SIMULATOR: Event-driven packet-level simulator with Leaf-Spine topology.
-
-Topology (simplified leaf-spine, matching paper Section 4.1):
-  ┌──────────┐       ┌──────────┐
-  │  Spine0  │       │  Spine1  │
-  └──┬───┬───┘       └───┬───┬──┘
-     │   │               │   │
-  ┌──┴───┴───┐       ┌───┴───┴──┐
-  │  Leaf0   │       │  Leaf1   │    ← Shared buffer + BM here
-  └┬─┬─┬─┬──┘       └──┬─┬─┬─┬┘
-   │ │ │ │              │ │ │ │
-  H0 H1 H2 H3        H4 H5 H6 H7   ← 8 hosts total
-
-  - All links: 10 Gbps, 10 μs propagation delay
-  - Leaf switches: shared buffer with DT (Dynamic Thresholds),
-    CS (Complete Sharing), and ABM (Active Buffer Management)
-  - Spine switches: forwarding only (infinite buffer)
-  - Hosts generate web-search and incast traffic
-
-Key equations from the paper:
-  DT  (Eq.5):  T = α · (B − Q(t))
-  ABM (Eq.9):  T = α · (1/n_p) · (B − Q(t)) · (μ_pi / b)
-"""
+# ABM: Active Buffer Management in Datacenters - Figure 6 Replication
+# CIS 437/537 Final Project - Fnu Nidhi (UMID: 92553817)
+#
+# Paper: Addanki et al., "ABM: Active Buffer Management in Datacenters"
+#        ACM SIGCOMM 2022, https://dl.acm.org/doi/10.1145/3544216.3544252
+#
+# SIMULATOR: Event-driven packet-level simulator with Leaf-Spine topology.
+#
+# Topology (simplified leaf-spine, matching paper Section 4.1):
+#   ┌──────────┐       ┌──────────┐
+#   │  Spine0  │       │  Spine1  │
+#   └──┬───┬───┘       └───┬───┬──┘
+#      │   │               │   │
+#   ┌──┴───┴───┐       ┌───┴───┴──┐
+#   │  Leaf0   │       │  Leaf1   │    ← Shared buffer + BM here
+#   └┬─┬─┬─┬──┘        └──┬─┬─┬─┬┘
+#    │ │ │ │              │ │ │ │
+#   H0 H1 H2 H3         H4 H5 H6 H7   ← 8 hosts total
+#
+#   - All links: 10 Gbps, 10 μs propagation delay
+#   - Leaf switches: shared buffer with DT (Dynamic Thresholds),
+#     CS (Complete Sharing), and ABM (Active Buffer Management)
+#   - Spine switches: forwarding only (infinite buffer)
+#   - Hosts generate web-search and incast traffic
+#
+# Key equations from the paper:
+#   DT  (Eq.5):  T = α · (B − Q(t))
+#   ABM (Eq.9):  T = α · (1/n_p) · (B − Q(t)) · (μ_pi / b)
 
 import numpy as np
 import heapq
@@ -82,7 +80,7 @@ def sample_flow_size(rng):
     return int(20e6)
 
 def ideal_fct(size_bytes):
-    """Ideal flow completion time (FCT) = round-trip time (RTT) + serialization delay."""
+    # Ideal flow completion time (FCT) = round-trip time (RTT) + serialization delay.
     return RTT_BASE + (size_bytes * 8) / LINK_BW
 
 # ============================================================
@@ -90,7 +88,7 @@ def ideal_fct(size_bytes):
 # ============================================================
 
 class SharedBuffer:
-    """Shared buffer pool at a leaf switch with multiple egress ports."""
+    # Shared buffer pool at a leaf switch with multiple egress ports.
     def __init__(self, total_buf, num_ports, scheme='DT'):
         self.B = total_buf
         self.num_ports = num_ports
@@ -112,16 +110,16 @@ class SharedBuffer:
         return self.total_occ() / self.B * 100
 
     def _n_congested(self):
-        """Count queues that are congested (ABM: Section 3.1)."""
+        # Count queues that are congested (ABM: Section 3.1).
         fair_share = self.B * ALPHA / self.num_ports
         return max(1, int((self.queues > max(1, 0.9 * fair_share)).sum()))
 
     def _drain_norm(self, port):
-        """Normalized drain rate μ/b for ABM (Active Buffer Management)."""
+        # Normalized drain rate μ/b for ABM (Active Buffer Management).
         return np.clip(self.drain_rates[port] / LINK_BW, 0.01, 1.0)
 
     def threshold(self, port, is_unscheduled=False):
-        """Compute admission threshold for a port's queue."""
+        # Compute admission threshold for a port's queue.
         remaining = max(0, self.B - self.total_occ())
 
         if self.scheme == 'DT':
@@ -142,16 +140,13 @@ class SharedBuffer:
             return alpha * (1.0 / n_p) * remaining * mu
 
     def try_enqueue(self, port, is_unscheduled=False):
-        """
-        Try to admit a packet. Returns (admitted, ecn_marked).
-        
-        ABM uses Explicit Congestion Notification (ECN) marking (not hard drops)
-        for scheduled traffic:
-        - Unscheduled (incast first round-trip time (RTT)): hard drop if queue > threshold
-        - Scheduled (web-search): admit but ECN-mark if queue > threshold
-          Hard drop only if total buffer is physically full
-        DT (Dynamic Thresholds) / CS (Complete Sharing): always hard drop if queue > threshold
-        """
+        # Try to admit a packet. Returns (admitted, ecn_marked).
+        # ABM uses Explicit Congestion Notification (ECN) marking (not hard drops)
+        # for scheduled traffic:
+        # - Unscheduled (incast first round-trip time (RTT)): hard drop if queue > threshold
+        # - Scheduled (web-search): admit but ECN-mark if queue > threshold
+        #   Hard drop only if total buffer is physically full
+        # DT (Dynamic Thresholds) / CS (Complete Sharing): always hard drop if queue > threshold
         thr = self.threshold(port, is_unscheduled)
         
         if self.scheme == 'ABM' and not is_unscheduled:
@@ -181,7 +176,7 @@ class SharedBuffer:
                 return False, False
 
     def dequeue(self, port):
-        """Remove a packet from queue (transmitted)."""
+        # Remove a packet from queue (transmitted).
         if self.queues[port] > 0:
             self.queues[port] -= 1
             self._deq_counts[port] += 1
@@ -189,7 +184,7 @@ class SharedBuffer:
         return False
 
     def update_drain_rates(self, current_time):
-        """Update drain rates periodically (ABM: once per round-trip time (RTT))."""
+        # Update drain rates periodically (ABM: once per round-trip time (RTT)).
         if self.scheme != 'ABM':
             return
         dt = current_time - self._last_update
@@ -208,10 +203,8 @@ class SharedBuffer:
 # ============================================================
 
 class Topology:
-    """
-    Leaf-Spine datacenter topology.
-    Hosts connect to leaf switches; leaf switches connect to spines.
-    """
+    # Leaf-Spine datacenter topology.
+    # Hosts connect to leaf switches; leaf switches connect to spines.
     def __init__(self):
         self.host_to_leaf = {}   # host_id → leaf_id
         self.leaf_to_hosts = {}  # leaf_id → [host_ids]
@@ -228,15 +221,13 @@ class Topology:
         return self.host_to_leaf[host_id]
 
     def get_egress_port(self, dst_host):
-        """Get the egress port on the destination leaf for this host."""
+        # Get the egress port on the destination leaf for this host.
         return dst_host % HOSTS_PER_LEAF
 
     def get_path_delay(self, src, dst):
-        """
-        Compute one-way propagation delay through the topology.
-        Same leaf:  host→leaf→host = 2 × LINK_DELAY
-        Diff leaf:  host→leaf→spine→leaf→host = 4 × LINK_DELAY
-        """
+        # Compute one-way propagation delay through the topology.
+        # Same leaf:  host→leaf→host = 2 × LINK_DELAY
+        # Diff leaf:  host→leaf→spine→leaf→host = 4 × LINK_DELAY
         src_leaf = self.get_leaf(src)
         dst_leaf = self.get_leaf(dst)
         if src_leaf == dst_leaf:
@@ -262,11 +253,9 @@ class Topology:
 # ============================================================
 
 class Simulator:
-    """
-    Event-driven simulator. Packets travel through the topology,
-    queue at leaf switch egress ports, and get admitted/dropped
-    by the buffer management scheme.
-    """
+    # Event-driven simulator. Packets travel through the topology,
+    # queue at leaf switch egress ports, and get admitted/dropped
+    # by the buffer management scheme.
     def __init__(self, topo, scheme='DT', duration=0.04):
         self.topo = topo
         self.scheme = scheme
@@ -324,7 +313,7 @@ class Simulator:
         return f
 
     def _send_packets(self, f):
-        """Send as many packets as the congestion window allows."""
+        # Send as many packets as the congestion window allows.
         if not f['active']:
             return
         in_flight = f['sent'] - f['acked']
@@ -351,7 +340,7 @@ class Simulator:
     # ---- Traffic Generation ----
 
     def generate_websearch(self, load_frac, rng):
-        """Generate Poisson web-search traffic between random host pairs."""
+        # Generate Poisson web-search traffic between random host pairs.
         avg_size = 200000
         total_bw = LINK_BW * NUM_LEAVES * HOSTS_PER_LEAF
         rate = load_frac * total_bw / (avg_size * 8)
@@ -374,10 +363,8 @@ class Simulator:
             })
 
     def generate_incast(self, request_pct, load_frac, rng):
-        """
-        Generate incast traffic: multiple hosts simultaneously send
-        to one host, simulating distributed query-response pattern.
-        """
+        # Generate incast traffic: multiple hosts simultaneously send
+        # to one host, simulating distributed query-response pattern.
         req_bytes = int(request_pct * SHARED_BUF * PKT_SIZE)
         n_senders = HOSTS_PER_LEAF  # ALL hosts on Leaf0 send simultaneously (8 senders)
         per_sender = max(PKT_SIZE, req_bytes // n_senders)
@@ -409,7 +396,7 @@ class Simulator:
         self._send_packets(f)
 
     def _handle_pkt_arrive(self, data):
-        """Packet arrives at destination leaf switch's egress port."""
+        # Packet arrives at destination leaf switch's egress port.
         fid = data['fid']
         leaf = data['leaf']
         port = data['port']
@@ -445,7 +432,7 @@ class Simulator:
                 self._push(self.time + MIN_RTO, 'RTO', fid)
 
     def _handle_pkt_depart(self, data):
-        """Packet transmitted from egress port → travels to destination host."""
+        # Packet transmitted from egress port → travels to destination host.
         leaf = data['leaf']
         port = data['port']
         buf = self.leaf_buffers[leaf]
@@ -468,7 +455,7 @@ class Simulator:
         self._push(self.time + ack_delay, 'ACK', (fid, data.get('ecn', False)))
 
     def _handle_ack(self, ack_data):
-        """ACK received at sender."""
+        # ACK received at sender.
         fid, ecn_marked = ack_data
         if fid not in self.flows:
             return
@@ -503,7 +490,7 @@ class Simulator:
         self._send_packets(f)
 
     def _handle_rto(self, fid):
-        """Retransmission timeout."""
+        # Retransmission timeout.
         if fid not in self.flows:
             return
         f = self.flows[fid]
@@ -514,7 +501,7 @@ class Simulator:
     # ---- Main Loop ----
 
     def run(self):
-        """Run the event-driven simulation."""
+        # Run the event-driven simulation.
         max_events = 10_000_000
         count = 0
         sample_every = 5000
@@ -542,7 +529,7 @@ class Simulator:
         return self._collect_results()
 
     def _collect_results(self):
-        """Compute flow completion time (FCT) slowdown metrics from completed and incomplete flows."""
+        # Compute flow completion time (FCT) slowdown metrics from completed and incomplete flows.
         incast = []
         ws_short = []
 

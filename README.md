@@ -27,13 +27,6 @@ The paper's main contribution is showing that better buffer admission logic can 
 
 **Chosen result:** **Figure 6** in the paper — *buffer management under various loads*, with four panels:
 
-| Panel | Metric (y-axis) | Workload |
-|-------|-----------------|----------|
-| (a) | 99th percentile **FCT slowdown** (log scale) | Incast |
-| (b) | 99th percentile **FCT slowdown** (log scale) | Short web-search flows |
-| (c) | 99th percentile **buffer occupancy** (%) | — |
-| (d) | **Average throughput** (normalized %) | — |
-
 **Why this figure:** I chose Figure 6 because it is the clearest summary of the paper's main claim. Instead of focusing on one narrow metric, it compares **Dynamic Thresholds (DT)**, **Complete Sharing (CS)**, and **Active Buffer Management (ABM)** across multiple offered loads and across four complementary views: incast tail latency, web-search tail latency, buffer occupancy, and throughput. Reproducing this figure is a strong test of whether the implementation captures the paper's core idea.
 
 This figure is also a good choice for a replication project because it forces the simulator to combine the paper's main components: the shared-buffer policy, multiple traffic types, load variation, and sender-side reaction to congestion. If the implementation were wrong in an important way, it would likely show up somewhere in this four-panel comparison.
